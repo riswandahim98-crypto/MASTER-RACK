@@ -233,7 +233,8 @@
     <div class="ed-sub">URL Web App (Apps Script /exec) untuk menyimpan ke Google Sheet.</div>
     <label class="fld">URL /exec</label>
     <input class="cfg-in" id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
-    <div class="hint">Deploy <b>Code.gs</b> sebagai Web App (Execute as: Me, Access: Anyone), lalu tempel URL <b>/exec</b>-nya di sini. Data dibaca langsung dari sheet; penyimpanan lewat URL ini.</div>
+    <div class="hint">Deploy <b>Code.gs</b> sebagai Web App (Execute as: <b>Me</b>, Who has access: <b>Anyone</b>), lalu tempel URL <b>/exec</b>-nya di sini. Data dibaca langsung dari sheet; penyimpanan lewat URL ini.</div>
+    <button class="btn ghost" id="cfgTest" style="width:100%;margin-bottom:10px">🔌 Tes koneksi ke Sheet</button>
     <div class="btnrow"><button class="btn ghost" id="cfgClose">Batal</button><button class="btn primary" id="cfgSave">Simpan</button></div>
   </div>
 </div>
@@ -448,6 +449,10 @@ function edPreview(){
   const r=$('#selRack').value,l=$('#selLevel').value,b=$('#selBin').value;
   $('#edPrev').textContent=(r&&l&&b)?`${r}-${l}-${b}`:'—';
 }
+// auto-simpan begitu Rak+Level+Bin lengkap (tanpa perlu klik Simpan)
+function maybeAutoSave(){
+  if($('#selRack').value && $('#selLevel').value && $('#selBin').value) saveEditor(false);
+}
 function openEditor(it){
   editing=it;
   $('#edNm').textContent=it.nama||'(tanpa nama)';
@@ -485,7 +490,12 @@ async function saveEditor(clear){
     localStorage.setItem(LS.cache, JSON.stringify(ITEMS));
     toast(clear?'Dikosongkan ✓':`Tersimpan: ${j.alamat||''} ✓`);
     hideBack('#edBack'); render();
-  }catch(e){ toast(e.message||'Gagal simpan', true); }
+  }catch(e){
+    const msg=/fail|fetch|network|load/i.test(String(e.message))
+      ? 'Gagal terhubung ke Sheet. Cek URL /exec & pastikan deploy Access = "Anyone" (⚙️ → Tes koneksi).'
+      : (e.message||'Gagal simpan');
+    toast(msg, true);
+  }
   finally{ btn.disabled=cbtn.disabled=false; btn.textContent=prevTxt; }
 }
 
@@ -686,7 +696,25 @@ function bindUI(){
   $('#cfgSave').onclick=()=>{ const u=$('#cfgUrl').value.trim();
     if(u && !/\/exec$/.test(u)){ toast('URL harus diakhiri /exec', true); return; }
     localStorage.setItem(LS.exec,u); hideBack('#cfgBack'); toast('URL disimpan ✓'); };
-  ['selRack','selLevel','selBin'].forEach(id=>$('#'+id).addEventListener('change',edPreview));
+  $('#cfgTest').onclick=async()=>{
+    const u=($('#cfgUrl').value.trim()||execUrl());
+    if(!u){ toast('Isi URL /exec dulu', true); return; }
+    if(!/\/exec$/.test(u)){ toast('URL harus diakhiri /exec', true); return; }
+    const b=$('#cfgTest'); b.disabled=true; const t=b.textContent; b.textContent='Menguji…';
+    try{
+      const r=await fetch(u,{method:'POST',body:JSON.stringify({action:'config'})});
+      const j=await r.json();
+      if(j && j.ok){ toast(`Koneksi OK ✓ — ${j.racks?j.racks.length:'?'} rak terbaca`); localStorage.setItem(LS.exec,u); }
+      else throw new Error((j&&j.error)||'Respon tidak valid');
+    }catch(e){
+      const em=String(e.message||e);
+      let m='Backend error: '+em;
+      if(/fail|fetch|network|load/i.test(em)) m='Gagal terhubung. Kemungkinan: deploy belum "Anyone", URL salah, atau belum di-deploy.';
+      else if(/tidak dikenal/i.test(em)) m='Terhubung, tapi Code.gs masih versi LAMA. Deploy versi baru (Manage deployments → New version).';
+      toast(m, true);
+    } finally{ b.disabled=false; b.textContent=t; }
+  };
+  ['selRack','selLevel','selBin'].forEach(id=>$('#'+id).addEventListener('change',()=>{ edPreview(); maybeAutoSave(); }));
   $('#edSave').onclick=()=>saveEditor(false);
   $('#edClear').onclick=()=>saveEditor(true);
   // tap backdrop menutup
