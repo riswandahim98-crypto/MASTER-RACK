@@ -96,7 +96,21 @@
     background:var(--bg);font-size:16px;margin-bottom:14px;appearance:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat:no-repeat;background-position:right 14px center;background-size:12px}
-  .lvlbin{display:flex;gap:12px}.lvlbin>div{flex:1}
+  .lvlbin{display:flex;gap:12px;margin-bottom:2px}.lvlbin>div{flex:1;min-width:0}
+  .pickwrap{position:relative;max-height:216px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;
+    padding:8px 10px 10px;margin-bottom:14px;background:var(--bg);-webkit-overflow-scrolling:touch}
+  .pickgrp{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.5px;margin:10px 2px 6px}
+  .pickgrp:first-child{margin-top:2px}
+  .chiprow{display:flex;flex-wrap:wrap;gap:7px}
+  .pickrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .pchip{min-width:46px;text-align:center;padding:11px 13px;border-radius:11px;border:1px solid var(--line);
+    background:var(--card);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;
+    color:var(--text);transition:transform .05s}
+  .pchip:active{transform:scale(.94)}
+  .pchip.on{background:var(--accent);color:#fff;border-color:var(--accent);
+    box-shadow:0 2px 8px rgba(13,148,136,.35)}
+  .pickrow .pchip{flex:1;min-width:42px}
   .previewbox{background:var(--accent-soft);border-radius:12px;padding:12px 14px;margin:4px 0 16px;
     display:flex;align-items:center;justify-content:space-between}
   html[data-theme="dark"] .previewbox{background:var(--accent-soft)}
@@ -196,10 +210,10 @@
     <div class="ed-sub" id="edSub"></div>
     <div class="ed-last" id="edLast"></div>
     <label class="fld">No Rack</label>
-    <select class="inp" id="selRack"></select>
+    <div class="pickwrap" id="pickRack"></div>
     <div class="lvlbin">
-      <div><label class="fld">Level Rack</label><select class="inp" id="selLevel"></select></div>
-      <div><label class="fld">Kolom Bin</label><select class="inp" id="selBin"></select></div>
+      <div><label class="fld">Level Rack</label><div class="pickrow" id="pickLevel"></div></div>
+      <div><label class="fld">Kolom Bin</label><div class="pickrow" id="pickBin"></div></div>
     </div>
     <div class="previewbox"><span class="lab">Alamat Rack</span><span class="val" id="edPrev">—</span></div>
     <div class="btnrow">
@@ -271,6 +285,7 @@ const RACKS = rackCodes();
 let ITEMS = [];        // {row,kode,nama,kategori,brand,rack,level,bin}
 let FILTER = 'all';    // all | todo | done
 let editing = null;
+let edSel = {rack:'', level:'', bin:''};   // pilihan aktif di editor (chip)
 let USERS = [];        // {nama, pin} dari tab USER
 const $ = s => document.querySelector(s);
 const execUrl = () => (localStorage.getItem(LS.exec)||'').trim();
@@ -428,30 +443,34 @@ function render(){
 }
 
 /* ============ Editor ============ */
-function fillSelect(sel, values, placeholder){
-  sel.innerHTML=`<option value="">${placeholder}</option>`+values.map(v=>`<option value="${v}">${v}</option>`).join('');
-}
+// Bangun chip Rak (per grup nomor) + Level + Bin — sekali tap = terpilih (tanpa "Done")
 function initSelects(){
-  // Rack dengan optgroup per nomor
-  let html='<option value="">— pilih rak —</option>';
-  let cur=null,buf='';
+  let html='', cur=null;
   for(const code of RACKS){
     const num=code.replace(/[A-Z]/g,'');
-    if(num!==cur){ if(buf) html+=`<optgroup label="Rak ${cur}">${buf}</optgroup>`; buf=''; cur=num; }
-    buf+=`<option value="${code}">${code}</option>`;
+    if(num!==cur){ if(cur!==null) html+='</div>'; html+=`<div class="pickgrp">Rak ${num}</div><div class="chiprow">`; cur=num; }
+    html+=`<button type="button" class="pchip" data-k="rack" data-v="${code}">${code}</button>`;
   }
-  if(buf) html+=`<optgroup label="Rak ${cur}">${buf}</optgroup>`;
-  $('#selRack').innerHTML=html;
-  fillSelect($('#selLevel'), LEVELS, '— level —');
-  fillSelect($('#selBin'), BINS, '— bin —');
+  if(cur!==null) html+='</div>';
+  $('#pickRack').innerHTML=html;
+  $('#pickLevel').innerHTML=LEVELS.map(v=>`<button type="button" class="pchip" data-k="level" data-v="${v}">${v}</button>`).join('');
+  $('#pickBin').innerHTML=BINS.map(v=>`<button type="button" class="pchip" data-k="bin" data-v="${v}">${v}</button>`).join('');
+  document.querySelectorAll('.pchip').forEach(b=>b.onclick=()=>selectPick(b.dataset.k, b.dataset.v));
+}
+function selectPick(k, v){
+  edSel[k] = edSel[k]===String(v) ? '' : String(v);   // tap lagi = batal pilih
+  highlightPicks(); edPreview(); maybeAutoSave();
+}
+function highlightPicks(){
+  document.querySelectorAll('.pchip').forEach(b=>b.classList.toggle('on', edSel[b.dataset.k]===b.dataset.v));
 }
 function edPreview(){
-  const r=$('#selRack').value,l=$('#selLevel').value,b=$('#selBin').value;
-  $('#edPrev').textContent=(r&&l&&b)?`${r}-${l}-${b}`:'—';
+  const {rack,level,bin}=edSel;
+  $('#edPrev').textContent=(rack&&level&&bin)?`${rack}-${level}-${bin}`:'—';
 }
-// auto-simpan begitu Rak+Level+Bin lengkap (tanpa perlu klik Simpan)
+// auto-simpan begitu Rak+Level+Bin lengkap (tanpa perlu klik Simpan/Done)
 function maybeAutoSave(){
-  if($('#selRack').value && $('#selLevel').value && $('#selBin').value) saveEditor(false);
+  if(edSel.rack && edSel.level && edSel.bin) saveEditor(false);
 }
 function openEditor(it){
   editing=it;
@@ -462,10 +481,14 @@ function openEditor(it){
     last.className='ed-last show';
     last.innerHTML=`Terakhir diisi oleh <b>${esc(it.petugas||'-')}</b>${it.waktu?' · '+esc(it.waktu):''}`;
   } else last.className='ed-last';
-  $('#selRack').value = RACKS.includes(it.rack)? it.rack : '';
-  $('#selLevel').value = LEVELS.map(String).includes(String(it.level))? String(it.level):'';
-  $('#selBin').value = BINS.map(String).includes(String(it.bin))? String(it.bin):'';
-  edPreview();
+  edSel = {
+    rack:  RACKS.includes(it.rack) ? it.rack : '',
+    level: LEVELS.map(String).includes(String(it.level)) ? String(it.level) : '',
+    bin:   BINS.map(String).includes(String(it.bin)) ? String(it.bin) : ''
+  };
+  highlightPicks(); edPreview();
+  const selChip=$('#pickRack').querySelector('.pchip.on');
+  $('#pickRack').scrollTop = selChip ? Math.max(0, selChip.offsetTop-48) : 0;
   showBack('#edBack');
 }
 async function saveEditor(clear){
@@ -474,7 +497,7 @@ async function saveEditor(clear){
   if(!pic){ toast('Masuk sebagai petugas dulu', true); showLogin(true); return; }
   const url=execUrl();
   if(!url){ toast('Set URL /exec dulu di ⚙️ Pengaturan', true); hideBack('#edBack'); showBack('#cfgBack'); return; }
-  const rack=clear?'':$('#selRack').value, level=clear?'':$('#selLevel').value, bin=clear?'':$('#selBin').value;
+  const rack=clear?'':edSel.rack, level=clear?'':edSel.level, bin=clear?'':edSel.bin;
   if(!clear && (!rack||!level||!bin)){ toast('Lengkapi Rak, Level, dan Bin', true); return; }
   const btn=$('#edSave'), cbtn=$('#edClear'); btn.disabled=cbtn.disabled=true;
   const prevTxt=btn.textContent; btn.textContent='Menyimpan…';
@@ -714,7 +737,6 @@ function bindUI(){
       toast(m, true);
     } finally{ b.disabled=false; b.textContent=t; }
   };
-  ['selRack','selLevel','selBin'].forEach(id=>$('#'+id).addEventListener('change',()=>{ edPreview(); maybeAutoSave(); }));
   $('#edSave').onclick=()=>saveEditor(false);
   $('#edClear').onclick=()=>saveEditor(true);
   // tap backdrop menutup
