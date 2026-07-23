@@ -283,6 +283,9 @@
 /* ============ Konfigurasi ============ */
 const SHEET_ID = '1C2ZtSpsiXwtxFd7yIuhv7kUtV5VEiONOxjwVp8jCTQE';
 const GID = '0';
+// URL /exec Apps Script (default utk SEMUA HP — helper tak perlu isi apa pun).
+// Ganti di sini kalau URL deploy berubah (mis. bikin deployment baru).
+const DEFAULT_EXEC = 'https://script.google.com/macros/s/AKfycbx-R2KI5pULB-puEUMbsR96sQEoG06dqVrk6X5XN6_coXjmoNXEKiNNaEHcN6C0yZkI/exec';
 const LS = { exec:'mr_exec_url', theme:'mr_theme', cache:'mr_cache_v1', user:'mr_user' };
 
 /* Rak: 1A-1G, 2A-2D … 8A-8D, 9A-9E, 10A-10F */
@@ -301,7 +304,7 @@ let editing = null;
 let edSel = {rack:'', level:'', bin:'', sticker:''};   // pilihan aktif di editor (chip)
 let USERS = [];        // {nama, pin} dari tab USER
 const $ = s => document.querySelector(s);
-const execUrl = () => (localStorage.getItem(LS.exec)||'').trim();
+const execUrl = () => (localStorage.getItem(LS.exec)||DEFAULT_EXEC||'').trim();
 const currentUser = () => (localStorage.getItem(LS.user)||'').trim();
 
 /* ============ Util ============ */
