@@ -90,6 +90,10 @@
   html[data-theme="dark"] .ed-last b{color:var(--accent)}
   .card .who{font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:3px}
+  .stik{font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;white-space:nowrap;letter-spacing:.2px}
+  .stik.ok{background:var(--done-soft);color:var(--done)}
+  .stik.no{background:var(--warn-soft);color:var(--warn)}
+  .stik.nb{background:var(--line);color:var(--muted)}
   label.fld{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;
     letter-spacing:.4px;margin:0 0 6px}
   select.inp{width:100%;padding:13px 12px;border-radius:12px;border:1px solid var(--line);
@@ -111,6 +115,11 @@
   .pchip.on{background:var(--accent);color:#fff;border-color:var(--accent);
     box-shadow:0 2px 8px rgba(13,148,136,.35)}
   .pickrow .pchip{flex:1;min-width:42px}
+  .pickrow.blocked{opacity:.4;pointer-events:none;filter:grayscale(1)}
+  .lvlbin>div.nonbin #binLbl,.binlbl-off{color:var(--warn)!important}
+  .stikrow{margin-bottom:16px}
+  .stikrow .pchip.on[data-v="Sudah"]{background:var(--done);border-color:var(--done);box-shadow:0 2px 8px rgba(22,163,74,.35)}
+  .stikrow .pchip.on[data-v="Belum"]{background:var(--warn);border-color:var(--warn);box-shadow:0 2px 8px rgba(217,119,6,.35)}
   .previewbox{background:var(--accent-soft);border-radius:12px;padding:12px 14px;margin:4px 0 16px;
     display:flex;align-items:center;justify-content:space-between}
   html[data-theme="dark"] .previewbox{background:var(--accent-soft)}
@@ -211,10 +220,14 @@
     <div class="ed-last" id="edLast"></div>
     <label class="fld">No Rack</label>
     <div class="pickwrap" id="pickRack"></div>
+    <label class="fld">Penyimpanan</label>
+    <div class="pickrow" id="pickPenyimpanan"></div>
     <div class="lvlbin">
       <div><label class="fld">Level Rack</label><div class="pickrow" id="pickLevel"></div></div>
-      <div><label class="fld">Kolom Bin</label><div class="pickrow" id="pickBin"></div></div>
+      <div><label class="fld" id="binLbl">Kolom Bin</label><div class="pickrow" id="pickBin"></div></div>
     </div>
+    <label class="fld">Stiker sudah ditempel?</label>
+    <div class="pickrow stikrow" id="pickSticker"></div>
     <div class="previewbox"><span class="lab">Alamat Rack</span><span class="val" id="edPrev">—</span></div>
     <div class="btnrow">
       <button class="btn ghost" id="edClear">Kosongkan</button>
@@ -285,7 +298,7 @@ const RACKS = rackCodes();
 let ITEMS = [];        // {row,kode,nama,kategori,brand,rack,level,bin}
 let FILTER = 'all';    // all | todo | done
 let editing = null;
-let edSel = {rack:'', level:'', bin:''};   // pilihan aktif di editor (chip)
+let edSel = {rack:'', level:'', bin:'', sticker:''};   // pilihan aktif di editor (chip)
 let USERS = [];        // {nama, pin} dari tab USER
 const $ = s => document.querySelector(s);
 const execUrl = () => (localStorage.getItem(LS.exec)||'').trim();
@@ -293,8 +306,9 @@ const currentUser = () => (localStorage.getItem(LS.user)||'').trim();
 
 /* ============ Util ============ */
 function norm(s){ return String(s==null?'':s).toLowerCase().trim(); }
-function isDone(it){ return !!(it.rack && it.level && it.bin); }
-function addrOf(it){ return isDone(it) ? `${it.rack}-${it.level}-${it.bin}` : ''; }
+function isNonBin(it){ return String(it.penyimpanan||'').toUpperCase()==='NON BIN'; }
+function isDone(it){ return isNonBin(it) ? !!(it.rack && it.level) : !!(it.rack && it.level && it.bin); }
+function addrOf(it){ if(!isDone(it)) return ''; return isNonBin(it) ? `${it.rack}-${it.level}` : `${it.rack}-${it.level}-${it.bin}`; }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function toast(msg, err){
@@ -339,16 +353,16 @@ function rowsToItems(rows){
   const H={}; rows[0].forEach((h,i)=>{ const k=normKey(h); if(H[k]===undefined) H[k]=i; });
   const col=name=>H[normKey(name)];
   const ci={kode:col('Kode'),nama:col('Item Name'),kat:col('Kategori'),brand:col('Brand'),
-            rack:col('Rack'),level:col('No Level'),bin:col('Nomor Kolom Bin'),
-            petugas:col('Petugas'),waktu:col('Waktu')};
+            rack:col('Rack'),level:col('No Level'),bin:col('Nomor Kolom Bin'),penyimpanan:col('Penyimpanan'),
+            sticker:col('Sticker'),petugas:col('Petugas'),waktu:col('Waktu')};
   const out=[];
   for(let i=1;i<rows.length;i++){
     const r=rows[i]; const g=idx=>{ let v=idx==null?'':String(r[idx]==null?'':r[idx]).trim(); return v==='.'?'':v; };
     const kode=g(ci.kode), nama=g(ci.nama);
     if(!kode && !nama) continue;
     out.push({ row:i+1, kode, nama, kategori:g(ci.kat), brand:g(ci.brand),
-      rack:g(ci.rack), level:g(ci.level), bin:g(ci.bin),
-      petugas:g(ci.petugas), waktu:g(ci.waktu) });
+      rack:g(ci.rack), level:g(ci.level), bin:g(ci.bin), penyimpanan:g(ci.penyimpanan),
+      sticker:g(ci.sticker), petugas:g(ci.petugas), waktu:g(ci.waktu) });
   }
   return out;
 }
@@ -406,12 +420,13 @@ function hl(text,q){
 
 /* ============ Render ============ */
 function counts(){
-  let done=0; for(const it of ITEMS) if(isDone(it)) done++;
-  return {all:ITEMS.length, done, todo:ITEMS.length-done};
+  let done=0, nostik=0;
+  for(const it of ITEMS){ if(isDone(it)){ done++; if(it.sticker!=='Sudah') nostik++; } }
+  return {all:ITEMS.length, done, todo:ITEMS.length-done, nostik};
 }
 function renderChips(){
   const c=counts();
-  const defs=[['all','Semua',c.all],['todo','Belum',c.todo],['done','Selesai',c.done]];
+  const defs=[['all','Semua',c.all],['todo','Belum',c.todo],['done','Selesai',c.done],['nostik','Stiker ✗',c.nostik]];
   $('#chips').innerHTML=defs.map(([k,l,n])=>
     `<button class="chip ${FILTER===k?'on':''}" data-f="${k}">${l} <span class="n">${n}</span></button>`).join('');
   $('#chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;render();});
@@ -422,6 +437,7 @@ function render(){
   let base = q ? (searchItems(q)||[]) : ITEMS;
   if(FILTER==='done') base=base.filter(isDone);
   else if(FILTER==='todo') base=base.filter(it=>!isDone(it));
+  else if(FILTER==='nostik') base=base.filter(it=>isDone(it) && it.sticker!=='Sudah');
   const list=$('#list');
   if(!base.length){
     list.innerHTML=`<div class="empty-state"><div class="big">${q?'🔍':'📭'}</div>${q?'Tidak ada item cocok.':'Belum ada item.'}</div>`;
@@ -432,12 +448,14 @@ function render(){
     const idx=ITEMS.indexOf(it);
     const done=isDone(it);
     const pill=done?`<span class="pill done">${esc(addrOf(it))}</span>`:`<span class="pill empty">belum</span>`;
+    const nb=(done && isNonBin(it))?`<span class="stik nb">NON BIN</span>`:'';
+    const stik=done?(it.sticker==='Sudah'?`<span class="stik ok">🏷️ tertempel</span>`:`<span class="stik no">🏷️ stiker belum</span>`):'';
     const who=(done && it.petugas)?`<div class="who">👤 ${esc(it.petugas)}</div>`:'';
     const sub=[it.kode,it.brand,it.kategori].filter(Boolean).join(' · ');
     return `<div class="card" data-i="${idx}">
       <div class="body"><div class="nm">${hl(it.nama||'(tanpa nama)',q)}</div>
       <div class="sub">${hl(sub,q)}</div></div>
-      <div class="addr">${pill}${who}</div></div>`;
+      <div class="addr">${pill}${nb}${stik}${who}</div></div>`;
   }).join('') + (base.length>shown.length?`<div class="empty-state muted" style="padding:16px">…${base.length-shown.length} item lagi. Persempit pencarian.</div>`:'');
   list.querySelectorAll('.card').forEach(c=>c.onclick=()=>openEditor(ITEMS[+c.dataset.i]));
 }
@@ -455,22 +473,42 @@ function initSelects(){
   $('#pickRack').innerHTML=html;
   $('#pickLevel').innerHTML=LEVELS.map(v=>`<button type="button" class="pchip" data-k="level" data-v="${v}">${v}</button>`).join('');
   $('#pickBin').innerHTML=BINS.map(v=>`<button type="button" class="pchip" data-k="bin" data-v="${v}">${v}</button>`).join('');
+  $('#pickPenyimpanan').innerHTML=[['BIN','📦 BIN'],['NON BIN','🚫 NON BIN']]
+    .map(([v,l])=>`<button type="button" class="pchip" data-k="penyimpanan" data-v="${v}">${l}</button>`).join('');
+  $('#pickSticker').innerHTML=[['Sudah','✅ Sudah'],['Belum','⬜ Belum']]
+    .map(([v,l])=>`<button type="button" class="pchip" data-k="sticker" data-v="${v}">${l}</button>`).join('');
   document.querySelectorAll('.pchip').forEach(b=>b.onclick=()=>selectPick(b.dataset.k, b.dataset.v));
 }
 function selectPick(k, v){
-  edSel[k] = edSel[k]===String(v) ? '' : String(v);   // tap lagi = batal pilih
+  if(k==='penyimpanan') edSel.penyimpanan = String(v);      // selalu ada nilai (tak bisa kosong)
+  else edSel[k] = edSel[k]===String(v) ? '' : String(v);    // tap lagi = batal pilih
+  if(k==='penyimpanan') updateBinState();
   highlightPicks(); edPreview(); maybeAutoSave();
+}
+// Kunci/buka kolom Bin sesuai jenis penyimpanan
+function updateBinState(){
+  const nonbin = edSel.penyimpanan==='NON BIN';
+  $('#pickBin').classList.toggle('blocked', nonbin);
+  $('#binLbl').textContent = nonbin ? 'Kolom Bin (non-bin)' : 'Kolom Bin';
+  $('#binLbl').classList.toggle('binlbl-off', nonbin);
+  if(nonbin) edSel.bin='';
 }
 function highlightPicks(){
   document.querySelectorAll('.pchip').forEach(b=>b.classList.toggle('on', edSel[b.dataset.k]===b.dataset.v));
 }
 function edPreview(){
-  const {rack,level,bin}=edSel;
-  $('#edPrev').textContent=(rack&&level&&bin)?`${rack}-${level}-${bin}`:'—';
+  const {rack,level,bin,penyimpanan}=edSel;
+  let a='—';
+  if(penyimpanan==='NON BIN'){ if(rack&&level) a=`${rack}-${level}`; }
+  else if(rack&&level&&bin){ a=`${rack}-${level}-${bin}`; }
+  $('#edPrev').textContent=a;
 }
-// auto-simpan begitu Rak+Level+Bin lengkap (tanpa perlu klik Simpan/Done)
+function addrReady(){
+  return edSel.penyimpanan==='NON BIN' ? (edSel.rack&&edSel.level) : (edSel.rack&&edSel.level&&edSel.bin);
+}
+// auto-simpan begitu alamat lengkap (BIN: rak+level+bin, NON BIN: rak+level) + stiker
 function maybeAutoSave(){
-  if(edSel.rack && edSel.level && edSel.bin) saveEditor(false);
+  if(addrReady() && edSel.sticker) saveEditor(false);
 }
 function openEditor(it){
   editing=it;
@@ -484,9 +522,11 @@ function openEditor(it){
   edSel = {
     rack:  RACKS.includes(it.rack) ? it.rack : '',
     level: LEVELS.map(String).includes(String(it.level)) ? String(it.level) : '',
-    bin:   BINS.map(String).includes(String(it.bin)) ? String(it.bin) : ''
+    bin:   BINS.map(String).includes(String(it.bin)) ? String(it.bin) : '',
+    penyimpanan: isNonBin(it) ? 'NON BIN' : 'BIN',
+    sticker: (it.sticker==='Sudah'||it.sticker==='Belum') ? it.sticker : ''
   };
-  highlightPicks(); edPreview();
+  updateBinState(); highlightPicks(); edPreview();
   const selChip=$('#pickRack').querySelector('.pchip.on');
   $('#pickRack').scrollTop = selChip ? Math.max(0, selChip.offsetTop-48) : 0;
   showBack('#edBack');
@@ -497,16 +537,23 @@ async function saveEditor(clear){
   if(!pic){ toast('Masuk sebagai petugas dulu', true); showLogin(true); return; }
   const url=execUrl();
   if(!url){ toast('Set URL /exec dulu di ⚙️ Pengaturan', true); hideBack('#edBack'); showBack('#cfgBack'); return; }
-  const rack=clear?'':edSel.rack, level=clear?'':edSel.level, bin=clear?'':edSel.bin;
-  if(!clear && (!rack||!level||!bin)){ toast('Lengkapi Rak, Level, dan Bin', true); return; }
+  const penyimpanan = edSel.penyimpanan||'BIN';
+  const rack=clear?'':edSel.rack, level=clear?'':edSel.level, sticker=clear?'':edSel.sticker;
+  const bin=(clear||penyimpanan==='NON BIN')?'':edSel.bin;
+  if(!clear){
+    if(penyimpanan==='NON BIN'){ if(!rack||!level){ toast('Lengkapi Rak & Level', true); return; } }
+    else if(!rack||!level||!bin){ toast('Lengkapi Rak, Level, dan Bin', true); return; }
+  }
   const btn=$('#edSave'), cbtn=$('#edClear'); btn.disabled=cbtn.disabled=true;
   const prevTxt=btn.textContent; btn.textContent='Menyimpan…';
   try{
     const res=await fetch(url,{method:'POST',body:JSON.stringify({
-      action:'update', row:editing.row, kode:editing.kode, rack, level, bin, pic })});
+      action:'update', row:editing.row, kode:editing.kode, rack, level, bin, penyimpanan, sticker, pic })});
     const j=await res.json();
     if(!j.ok) throw new Error(j.error||'Gagal simpan');
     editing.rack=rack; editing.level=level; editing.bin=bin;   // optimistic
+    editing.penyimpanan=j.penyimpanan!==undefined?j.penyimpanan:(clear?'':penyimpanan);
+    editing.sticker=j.sticker!==undefined?j.sticker:(clear?'':sticker);
     editing.petugas=j.petugas!==undefined?j.petugas:(clear?'':pic);
     editing.waktu=j.waktu||'';
     if(j.row) editing.row=j.row;
@@ -526,7 +573,7 @@ async function saveEditor(clear){
 function renderSummary(){
   const c=counts();
   // alamat bin -> daftar item di dalamnya
-  const binMap={}; for(const it of ITEMS){ const a=addrOf(it); if(a){ (binMap[a]=binMap[a]||[]).push(it); } }
+  const binMap={}; for(const it of ITEMS){ if(isDone(it) && !isNonBin(it)){ const a=addrOf(it); (binMap[a]=binMap[a]||[]).push(it); } }
   const addrs=Object.keys(binMap);
   const groups={}; for(const a of addrs){ const n=binMap[a].length; (groups[n]=groups[n]||[]).push(a); }
   for(const n in groups) groups[n].sort();
@@ -535,8 +582,11 @@ function renderSummary(){
   const binTerisi=addrs.length, binKosong=totalSlot-binTerisi;
   const taken=new Set(addrs); const empties=[];
   for(const rc of RACKS) for(const l of LEVELS) for(const b of BINS){ const a=`${rc}-${l}-${b}`; if(!taken.has(a)) empties.push(a); }
-  // rekap per petugas
-  const perUser={}; for(const it of ITEMS){ if(isDone(it)){ const n=it.petugas||'(tanpa nama)'; perUser[n]=(perUser[n]||0)+1; } }
+  // rekap per petugas + stiker
+  const perUser={}; let stikSudah=0, stikBelum=0, nonBinCount=0;
+  for(const it of ITEMS){ if(isDone(it)){ const n=it.petugas||'(tanpa nama)'; perUser[n]=(perUser[n]||0)+1;
+    if(it.sticker==='Sudah') stikSudah++; else stikBelum++;
+    if(isNonBin(it)) nonBinCount++; } }
   const users=Object.keys(perUser).sort((a,b)=>perUser[b]-perUser[a]||(a<b?-1:1));
 
   const groupHtml = n => {
@@ -556,8 +606,11 @@ function renderSummary(){
     <div class="stat-grid">
       <div class="stat good"><div class="v">${c.done}</div><div class="l">Item sudah ada rak</div></div>
       <div class="stat warn"><div class="v">${c.todo}</div><div class="l">Item belum ada rak</div></div>
+      <div class="stat good"><div class="v">${stikSudah}</div><div class="l">🏷️ Stiker tertempel</div></div>
+      <div class="stat warn"><div class="v">${stikBelum}</div><div class="l">🏷️ Stiker belum</div></div>
       <div class="stat"><div class="v">${binTerisi}</div><div class="l">Bin terisi (≥1 SKU)</div></div>
       <div class="stat"><div class="v">${binKosong}</div><div class="l">Bin masih kosong</div></div>
+      <div class="stat"><div class="v">${nonBinCount}</div><div class="l">🚫 Item NON BIN</div></div>
     </div>
     ${users.length?`<div class="sec-t">👥 Per Petugas</div>
       ${users.map(n=>`<div class="distrow"><span>${esc(n)}</span><b>${perUser[n]} item</b></div>`).join('')}`:''}
