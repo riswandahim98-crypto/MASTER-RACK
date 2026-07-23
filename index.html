@@ -285,7 +285,7 @@ const SHEET_ID = '1C2ZtSpsiXwtxFd7yIuhv7kUtV5VEiONOxjwVp8jCTQE';
 const GID = '0';
 // URL /exec Apps Script (default utk SEMUA HP — helper tak perlu isi apa pun).
 // Ganti di sini kalau URL deploy berubah (mis. bikin deployment baru).
-const DEFAULT_EXEC = 'https://script.google.com/macros/s/AKfycbx-R2KI5pULB-puEUMbsR96sQEoG06dqVrk6X5XN6_coXjmoNXEKiNNaEHcN6C0yZkI/exec';
+const DEFAULT_EXEC = 'https://script.google.com/macros/s/AKfycbyqaxCBBsnA8gf7erN13iwQN4qi1uGZKvGHfv_vVwtH8d9NJS4LQFb620yNWAnytZs/exec';
 const LS = { exec:'mr_exec_url', theme:'mr_theme', cache:'mr_cache_v1', user:'mr_user' };
 
 /* Rak: 1A-1G, 2A-2D … 8A-8D, 9A-9E, 10A-10F */
@@ -803,6 +803,8 @@ function bindUI(){
   $('#scBack').addEventListener('click',e=>{ if(e.target===$('#scBack')) closeScanner(); });
 }
 (function init(){
+  // Bersihkan URL /exec lama yang rusak (deployment kosong) bila tersimpan di HP
+  try{ if((localStorage.getItem(LS.exec)||'').indexOf('AKfycbx-R2KI5')>=0) localStorage.removeItem(LS.exec); }catch(e){}
   applyTheme(localStorage.getItem(LS.theme)||'light');
   initSelects(); bindUI(); renderUserChip();
   const cached=localStorage.getItem(LS.cache);
