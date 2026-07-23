@@ -336,7 +336,7 @@ function normKey(s){ return norm(s).replace(/\s+/g,''); }
 /* ============ Muat data (gviz CSV) ============ */
 async function loadData(showSpin){
   if(showSpin) $('#loading').style.display='grid';
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}&_=${Date.now()}`;
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}&headers=1&_=${Date.now()}`;
   try{
     const r=await fetch(url,{cache:'no-store'});
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -687,7 +687,7 @@ function onSearchInput(){
 
 /* ============ Login petugas ============ */
 async function fetchUsers(){
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('USER')}&_=${Date.now()}`;
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('USER')}&headers=1&_=${Date.now()}`;
   try{
     const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw 0;
     const rows=parseCSV(await r.text()); if(!rows.length) return;
