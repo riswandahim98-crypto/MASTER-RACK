@@ -319,6 +319,27 @@ function toast(msg, err){
   clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',2200);
 }
 
+// POST ke Apps Script dengan AUTO-RETRY + timeout — tahan saat banyak user simpan bersamaan.
+// Aman di-retry: update itu idempotent (baris & nilai sama).
+async function postExec(payload, tries=3){
+  let lastErr;
+  for(let i=0;i<tries;i++){
+    try{
+      const ctrl = ('AbortController' in window) ? new AbortController() : null;
+      const to = ctrl ? setTimeout(()=>ctrl.abort(), 16000) : null;
+      const res = await fetch(execUrl(), {method:'POST', body:JSON.stringify(payload), signal: ctrl?ctrl.signal:undefined});
+      if(to) clearTimeout(to);
+      const j = await res.json();
+      if(!j.ok) throw new Error(j.error||'Gagal');
+      return j;
+    }catch(e){
+      lastErr = e;
+      if(i < tries-1) await new Promise(r=>setTimeout(r, 700*(i+1)));  // jeda 0.7s, 1.4s
+    }
+  }
+  throw lastErr;
+}
+
 /* ---- CSV parser (RFC4180) ---- */
 function parseCSV(text){
   const rows=[]; let row=[],f='',q=false;
@@ -547,29 +568,29 @@ async function saveEditor(clear){
     if(penyimpanan==='NON BIN'){ if(!rack||!level){ toast('Lengkapi Rak & Level', true); return; } }
     else if(!rack||!level||!bin){ toast('Lengkapi Rak, Level, dan Bin', true); return; }
   }
-  const btn=$('#edSave'), cbtn=$('#edClear'); btn.disabled=cbtn.disabled=true;
-  const prevTxt=btn.textContent; btn.textContent='Menyimpan…';
+  const it=editing;
+  const prev={rack:it.rack,level:it.level,bin:it.bin,penyimpanan:it.penyimpanan,sticker:it.sticker,petugas:it.petugas,waktu:it.waktu};
+  // OPTIMISTIC: langsung terapkan lokal, tutup editor & render — terasa instan.
+  it.rack=rack; it.level=level; it.bin=bin; it.penyimpanan=clear?'':penyimpanan;
+  it.sticker=clear?'':sticker; it.petugas=clear?'':pic; it.waktu='';
+  localStorage.setItem(LS.cache, JSON.stringify(ITEMS));
+  hideBack('#edBack'); render();
+  toast(clear?'Dikosongkan ✓':`Tersimpan: ${addrOf(it)||'-'} ✓`);
+  // Kirim ke server di LATAR BELAKANG (tak menahan UI), dengan auto-retry.
   try{
-    const res=await fetch(url,{method:'POST',body:JSON.stringify({
-      action:'update', row:editing.row, kode:editing.kode, rack, level, bin, penyimpanan, sticker, pic })});
-    const j=await res.json();
-    if(!j.ok) throw new Error(j.error||'Gagal simpan');
-    editing.rack=rack; editing.level=level; editing.bin=bin;   // optimistic
-    editing.penyimpanan=j.penyimpanan!==undefined?j.penyimpanan:(clear?'':penyimpanan);
-    editing.sticker=j.sticker!==undefined?j.sticker:(clear?'':sticker);
-    editing.petugas=j.petugas!==undefined?j.petugas:(clear?'':pic);
-    editing.waktu=j.waktu||'';
-    if(j.row) editing.row=j.row;
+    const j=await postExec({ action:'update', row:it.row, kode:it.kode, rack, level, bin, penyimpanan, sticker, pic });
+    if(j.row) it.row=j.row;
+    it.petugas=(j.petugas!==undefined)?j.petugas:it.petugas;
+    it.waktu=j.waktu||'';
     localStorage.setItem(LS.cache, JSON.stringify(ITEMS));
-    toast(clear?'Dikosongkan ✓':`Tersimpan: ${j.alamat||''} ✓`);
-    hideBack('#edBack'); render();
   }catch(e){
+    Object.assign(it, prev);                          // gagal → kembalikan
+    localStorage.setItem(LS.cache, JSON.stringify(ITEMS)); render();
     const msg=/fail|fetch|network|load/i.test(String(e.message))
-      ? 'Gagal terhubung ke Sheet. Cek URL /exec & pastikan deploy Access = "Anyone" (⚙️ → Tes koneksi).'
-      : (e.message||'Gagal simpan');
+      ? `Gagal simpan "${it.nama||''}" (koneksi). Data dikembalikan — coba lagi.`
+      : `Gagal simpan: ${e.message||''}`;
     toast(msg, true);
   }
-  finally{ btn.disabled=cbtn.disabled=false; btn.textContent=prevTxt; }
 }
 
 /* ============ Summary ============ */
