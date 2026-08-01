@@ -20,6 +20,7 @@
     --shadow:0 1px 3px rgba(0,0,0,.4);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{overflow-x:hidden;max-width:100%}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;
     padding-bottom:env(safe-area-inset-bottom)}
@@ -35,9 +36,15 @@
   .iconbtn{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
     color:#fff;font-size:18px;background:rgba(255,255,255,.14);flex-shrink:0}
   .iconbtn:active{background:rgba(255,255,255,.28)}
-  .userchip{width:auto;min-width:38px;padding:0 11px;gap:6px;font-size:13px;font-weight:700;
-    max-width:130px;overflow:hidden}
+  .userchip{width:auto;min-width:38px;padding:0 10px;gap:5px;font-size:13px;font-weight:700;
+    max-width:96px;overflow:hidden}
   .userchip .un{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brand{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .menu-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .menu-item{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;
+    background:var(--bg);border:1px solid var(--line);color:var(--text);font-size:16px;font-weight:600;text-align:left;width:100%}
+  .menu-item span{flex:1}
+  .menu-item:active{background:var(--accent-soft)}
 
   /* Search */
   .searchwrap{margin-top:10px;display:flex;gap:8px;align-items:center}
@@ -203,8 +210,12 @@
   .label .qr svg{width:100%;height:100%;display:block}
   .label .lname{font-size:8pt;font-weight:800;line-height:1.15;color:#000;text-transform:uppercase;width:100%;
     display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+  .pchip.padd{color:var(--accent-d);border-style:dashed;font-weight:800}
+  html[data-theme="dark"] .pchip.padd{color:var(--accent)}
   .l6box{break-inside:avoid;margin-bottom:8mm}
-  .l6box h3{font-size:13pt;margin:0 0 3mm;padding:2.5mm 3mm;background:#0d9488;color:#fff;border-radius:3px}
+  .l6box.pagebreak{break-after:page;page-break-after:always}
+  .l6box .l6sub{font-size:9pt;color:#555;margin:0 0 2mm}
+  .l6box h3{font-size:13pt;margin:0 0 1.5mm;padding:2.5mm 3mm;background:#0d9488;color:#fff;border-radius:3px}
   .l6table{width:100%;border-collapse:collapse;font-size:10pt}
   .l6table th,.l6table td{border:1px solid #888;padding:2mm 3mm;text-align:left;color:#000;vertical-align:top}
   .l6table th{background:#d6f5ef}
@@ -223,11 +234,8 @@
   <div class="hrow">
     <div class="brand">🗺️ Master Rack</div>
     <button class="iconbtn userchip" id="btnUser" title="Ganti petugas">👤</button>
-    <button class="iconbtn" id="btnSummary" title="Ringkasan">📊</button>
-    <button class="iconbtn" id="btnPrint" title="Cetak">🖨️</button>
-    <button class="iconbtn" id="btnTheme" title="Tema">🌙</button>
     <button class="iconbtn" id="btnRefresh" title="Muat ulang">↻</button>
-    <button class="iconbtn" id="btnCfg" title="Pengaturan">⚙️</button>
+    <button class="iconbtn" id="btnMenu" title="Menu">☰</button>
   </div>
   <div class="searchwrap">
     <div class="search">
@@ -301,6 +309,20 @@
   </div>
 </div>
 
+<!-- Menu -->
+<div class="backdrop" id="menuBack">
+  <div class="sheet"><div class="grab"></div>
+    <div class="ed-nm">☰ Menu</div>
+    <div class="menu-list">
+      <button class="menu-item" id="miSummary">📊 <span>Ringkasan</span></button>
+      <button class="menu-item" id="miPrint">🖨️ <span>Cetak (QR &amp; Level 6)</span></button>
+      <button class="menu-item" id="miTheme">🌙 <span>Ganti tema</span></button>
+      <button class="menu-item" id="miCfg">⚙️ <span>Pengaturan</span></button>
+    </div>
+    <div class="btnrow" style="margin-top:12px"><button class="btn ghost" id="menuClose">Tutup</button></div>
+  </div>
+</div>
+
 <!-- Cetak -->
 <div class="backdrop" id="printBack">
   <div class="sheet"><div class="grab"></div>
@@ -365,6 +387,7 @@ let FILTER = 'all';    // all | todo | done
 let editing = null;
 let edSel = {rack:'', level:'', bin:'', sticker:''};   // pilihan aktif di editor (chip)
 let reviseMode = false;   // true = auto-simpan mati, pakai tombol Simpan Perubahan
+let kardusMax = 12;       // batas chip kardus yang ditampilkan (bisa ditambah via ＋)
 let USERS = [];        // {nama, pin} dari tab USER
 const $ = s => document.querySelector(s);
 const execUrl = () => (localStorage.getItem(LS.exec)||DEFAULT_EXEC||'').trim();
@@ -577,7 +600,7 @@ function initSelects(){
   if(cur!==null) html+='</div>';
   $('#pickRack').innerHTML=html;
   $('#pickLevel').innerHTML=LEVELS.map(v=>`<button type="button" class="pchip" data-k="level" data-v="${v}">${v}</button>`).join('');
-  $('#pickBin').innerHTML=BINS.map(v=>`<button type="button" class="pchip" data-k="bin" data-v="${v}">${v}</button>`).join('');
+  // #pickBin dibangun dinamis oleh renderBinPicker (bin 1-5, atau KARDUS utk Level 6)
   $('#pickPenyimpanan').innerHTML=[['BIN','📦 BIN'],['NON BIN','🚫 NON BIN']]
     .map(([v,l])=>`<button type="button" class="pchip" data-k="penyimpanan" data-v="${v}">${l}</button>`).join('');
   $('#pickSticker').innerHTML=[['Sudah','✅ Sudah'],['Belum','⬜ Belum']]
@@ -587,14 +610,36 @@ function initSelects(){
 function selectPick(k, v){
   if(k==='penyimpanan') edSel.penyimpanan = String(v);      // selalu ada nilai (tak bisa kosong)
   else edSel[k] = edSel[k]===String(v) ? '' : String(v);    // tap lagi = batal pilih
-  if(k==='penyimpanan') updateBinState();
+  if(k==='level'){ edSel.bin=''; renderBinPicker(); }        // ganti level → bin/kardus di-reset & picker disesuaikan
+  if(k==='penyimpanan' || k==='level') updateBinState();
   highlightPicks(); edPreview(); maybeAutoSave();
 }
-// Kunci/buka kolom Bin sesuai jenis penyimpanan
+// bin 1-5 utk level 1-5; KARDUS (angka bebas + tombol ＋) utk Level 6
+function maxKardusForRack(rack){
+  let m=0; for(const it of ITEMS){ if(it.rack===rack && String(it.level)==='6'){ const k=parseInt(it.bin,10); if(!isNaN(k)&&k>m) m=k; } } return m;
+}
+function renderBinPicker(){
+  const box=$('#pickBin'); const isL6 = edSel.level==='6';
+  if(isL6){
+    const cur=parseInt(edSel.bin,10);
+    const max=Math.max(kardusMax, maxKardusForRack(edSel.rack)+2, isNaN(cur)?0:cur+1, 12);
+    let h=''; for(let i=1;i<=max;i++) h+=`<button type="button" class="pchip" data-k="bin" data-v="${i}">${i}</button>`;
+    h+=`<button type="button" class="pchip padd" data-add="1" title="tambah kardus">＋</button>`;
+    box.innerHTML=h;
+  } else {
+    box.innerHTML=BINS.map(v=>`<button type="button" class="pchip" data-k="bin" data-v="${v}">${v}</button>`).join('');
+  }
+  box.querySelectorAll('.pchip').forEach(b=>{
+    if(b.dataset.add) b.onclick=()=>{ kardusMax=Math.max(kardusMax,12)+6; renderBinPicker(); highlightPicks(); };
+    else b.onclick=()=>selectPick(b.dataset.k, b.dataset.v);
+  });
+}
+// Kunci/buka kolom Bin/Kardus sesuai jenis penyimpanan & level
 function updateBinState(){
   const nonbin = edSel.penyimpanan==='NON BIN';
+  const base = edSel.level==='6' ? 'Kardus ke-' : 'Kolom Bin';
   $('#pickBin').classList.toggle('blocked', nonbin);
-  $('#binLbl').textContent = nonbin ? 'Kolom Bin (non-bin)' : 'Kolom Bin';
+  $('#binLbl').textContent = nonbin ? base+' (non-bin)' : base;
   $('#binLbl').classList.toggle('binlbl-off', nonbin);
   if(nonbin) edSel.bin='';
 }
@@ -640,6 +685,7 @@ function openEditor(it){
     sticker: (it.sticker==='Sudah'||it.sticker==='Belum') ? it.sticker : ''
   };
   reviseMode=false; updateReviseUI();
+  kardusMax=12; renderBinPicker();
   updateBinState(); highlightPicks(); edPreview();
   const selChip=$('#pickRack').querySelector('.pchip.on');
   $('#pickRack').scrollTop = selChip ? Math.max(0, selChip.offsetTop-48) : 0;
@@ -783,7 +829,7 @@ function hideBack(id){ $(id).classList.remove('show'); }
 /* ============ Theme ============ */
 function applyTheme(t){
   document.documentElement.setAttribute('data-theme',t);
-  $('#btnTheme').textContent = t==='dark'?'☀️':'🌙';
+  const mi=$('#miTheme'); if(mi) mi.innerHTML = `${t==='dark'?'☀️':'🌙'} <span>Ganti tema</span>`;
   document.querySelector('meta[name=theme-color]').setAttribute('content', t==='dark'?'#111a2b':'#0d9488');
 }
 function toggleTheme(){ const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
@@ -816,7 +862,8 @@ async function fetchUsers(){
 }
 function renderUserChip(){
   const u=currentUser();
-  $('#btnUser').innerHTML = u ? `👤 <span class="un">${esc(u)}</span>` : '👤';
+  const first=u?u.split(/\s+/)[0]:'';
+  $('#btnUser').innerHTML = u ? `👤 <span class="un">${esc(first)}</span>` : '👤';
 }
 function setUser(name){
   localStorage.setItem(LS.user, name); renderUserChip(); hideBack('#loginBack');
@@ -893,18 +940,32 @@ function buildQRLabels(petugas){
   showPrintRoot(`Label QR — ${petugas==='__all__'?'semua petugas':esc(petugas)} · ${list.length} label`, html);
 }
 function buildLevel6Tables(){
-  const byRack={};
-  for(const it of ITEMS){ if(isDone(it) && String(it.level)==='6'){ (byRack[it.rack]=byRack[it.rack]||[]).push(it); } }
-  const racks=Object.keys(byRack).sort(rackSort);
-  if(!racks.length){ toast('Belum ada barang di Level 6', true); return; }
-  const html=racks.map(rc=>{
-    const items=byRack[rc].slice().sort((a,b)=>(a.nama||'').localeCompare(b.nama||''));
+  // Kelompok per RAK + KARDUS — tiap kardus = 1 lembar (ditempel di kardus masing-masing).
+  const groups={};
+  for(const it of ITEMS){
+    if(isDone(it) && String(it.level)==='6'){
+      const kardus = it.bin || '-';
+      const key = it.rack+'||'+kardus;
+      (groups[key]=groups[key]||{rack:it.rack, kardus, items:[]}).items.push(it);
+    }
+  }
+  const keys=Object.keys(groups).sort((a,b)=>{
+    const g1=groups[a], g2=groups[b];
+    return rackSort(g1.rack,g2.rack) || ((parseInt(g1.kardus)||0)-(parseInt(g2.kardus)||0));
+  });
+  if(!keys.length){ toast('Belum ada barang di Level 6', true); return; }
+  const html=keys.map((k,idx)=>{
+    const g=groups[k];
+    const items=g.items.slice().sort((a,b)=>(a.nama||'').localeCompare(b.nama||''));
     const rows=items.map((it,i)=>`<tr><td class="no">${i+1}</td><td>${esc(it.kode)}</td><td>${esc(it.nama||'')}</td></tr>`).join('');
-    return `<div class="l6box"><h3>Rak ${esc(rc)} — Level 6 · ${items.length} barang</h3>
+    const brk = idx===keys.length-1 ? '' : ' pagebreak';
+    const kardusLbl = g.kardus==='-' ? '(tanpa kardus)' : 'Kardus '+esc(g.kardus);
+    return `<div class="l6box${brk}"><h3>Rak ${esc(g.rack)} · Level 6 · ${kardusLbl}</h3>
+      <div class="l6sub">${items.length} barang</div>
       <table class="l6table"><thead><tr><th class="no">No</th><th>Kode</th><th>Nama Barang</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }).join('');
-  showPrintRoot(`Daftar Isi Kardus Level 6 · ${racks.length} rak`, html);
+  showPrintRoot(`Daftar Kardus Level 6 · ${keys.length} kardus`, html);
 }
 function showPrintRoot(title, html){
   $('#prTitle').textContent=title;
@@ -931,9 +992,13 @@ function bindUI(){
   $('#btnScan').onclick=openScanner;
   $('#scClose').onclick=closeScanner;
   $('#btnRefresh').onclick=()=>loadData(true);
-  $('#btnTheme').onclick=toggleTheme;
-  $('#btnSummary').onclick=renderSummary;
-  $('#btnPrint').onclick=openPrintModal;
+  $('#btnMenu').onclick=()=>showBack('#menuBack');
+  $('#menuClose').onclick=()=>hideBack('#menuBack');
+  $('#menuBack').addEventListener('click',e=>{ if(e.target===$('#menuBack')) hideBack('#menuBack'); });
+  $('#miSummary').onclick=()=>{ hideBack('#menuBack'); renderSummary(); };
+  $('#miPrint').onclick=()=>{ hideBack('#menuBack'); openPrintModal(); };
+  $('#miTheme').onclick=toggleTheme;
+  $('#miCfg').onclick=()=>{ hideBack('#menuBack'); $('#cfgUrl').value=execUrl(); showBack('#cfgBack'); };
   $('#prClose').onclick=()=>hideBack('#printBack');
   $('#prMakeQR').onclick=()=>buildQRLabels($('#prPetugas').value);
   $('#prMakeL6').onclick=buildLevel6Tables;
@@ -942,7 +1007,6 @@ function bindUI(){
   $('#printBack').addEventListener('click',e=>{ if(e.target===$('#printBack')) hideBack('#printBack'); });
   $('#btnUser').onclick=()=>showLogin(true);
   $('#smClose').onclick=()=>hideBack('#smBack');
-  $('#btnCfg').onclick=()=>{ $('#cfgUrl').value=execUrl(); showBack('#cfgBack'); };
   $('#cfgClose').onclick=()=>hideBack('#cfgBack');
   $('#cfgSave').onclick=()=>{ const u=$('#cfgUrl').value.trim();
     if(u && !/\/exec$/.test(u)){ toast('URL harus diakhiri /exec', true); return; }
