@@ -456,22 +456,22 @@ function cleanItem(it){
 async function loadData(showSpin){
   if(showSpin) $('#loading').style.display='grid';
   let ok=false;
-  // 1) UTAMA: baca via backend — kebal filter & sortir yang dipasang di sheet.
+  // 1) UTAMA: gviz CSV — CEPAT & skala besar (langsung dari Google, tak bebani Apps Script).
   try{
-    const j=await postExec({action:'list'}, 2);
-    if(j && j.ok && Array.isArray(j.items)){
-      ITEMS=j.items.map(cleanItem);
-      localStorage.setItem(LS.cache, JSON.stringify(ITEMS)); ok=true;
-    }
+    const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}&headers=1&_=${Date.now()}`;
+    const r=await fetch(url,{cache:'no-store'});
+    if(!r.ok) throw 0;
+    const rows=parseCSV(await r.text());
+    if(rows.length>1){ ITEMS=rowsToItems(rows); localStorage.setItem(LS.cache, JSON.stringify(ITEMS)); ok=true; }
   }catch(e){}
-  // 2) CADANGAN: gviz CSV (kalau backend gagal)
+  // 2) CADANGAN: backend list (hanya kalau gviz gagal) — lebih lambat, jadi 1x saja.
   if(!ok){
     try{
-      const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}&headers=1&_=${Date.now()}`;
-      const r=await fetch(url,{cache:'no-store'});
-      if(!r.ok) throw 0;
-      ITEMS=rowsToItems(parseCSV(await r.text()));
-      localStorage.setItem(LS.cache, JSON.stringify(ITEMS)); ok=true;
+      const j=await postExec({action:'list'}, 1);
+      if(j && j.ok && Array.isArray(j.items)){
+        ITEMS=j.items.map(cleanItem);
+        localStorage.setItem(LS.cache, JSON.stringify(ITEMS)); ok=true;
+      }
     }catch(e){}
   }
   // 3) CACHE lokal (offline)
