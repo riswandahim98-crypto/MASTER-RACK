@@ -382,7 +382,7 @@ const LS = { exec:'mr_exec_url', theme:'mr_theme', cache:'mr_cache_v1', user:'mr
 /* Rak: 1A-1G, 2A-2D … 8A-8D, 9A-9E, 10A-10F */
 const RACK_CONFIG = [[1,7],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,5],[10,6]];
 const LEVELS = [1,2,3,4,5,6];
-const BINS   = [1,2,3,4,5];
+const BINS   = [1,2,3,4,5,6,7];
 function rackCodes(){
   const out=[]; for(const [n,c] of RACK_CONFIG){ for(let j=0;j<c;j++) out.push(n+String.fromCharCode(65+j)); } return out;
 }
@@ -403,8 +403,8 @@ const currentUser = () => (localStorage.getItem(LS.user)||'').trim();
 /* ============ Util ============ */
 function norm(s){ return String(s==null?'':s).toLowerCase().trim(); }
 function isNonBin(it){ return String(it.penyimpanan||'').toUpperCase()==='NON BIN'; }
-function isDone(it){ return isNonBin(it) ? !!(it.rack && it.level) : !!(it.rack && it.level && it.bin); }
-function addrOf(it){ if(!isDone(it)) return ''; return isNonBin(it) ? `${it.rack}-${it.level}` : `${it.rack}-${it.level}-${it.bin}`; }
+function isDone(it){ return !!(it.rack && it.level && it.bin); }   // semua butuh field ke-3 (bin/kardus/baris)
+function addrOf(it){ return isDone(it) ? `${it.rack}-${it.level}-${it.bin}` : ''; }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function toast(msg, err){
@@ -617,22 +617,31 @@ function initSelects(){
 function selectPick(k, v){
   if(k==='penyimpanan') edSel.penyimpanan = String(v);      // selalu ada nilai (tak bisa kosong)
   else edSel[k] = edSel[k]===String(v) ? '' : String(v);    // tap lagi = batal pilih
-  if(k==='level'){ edSel.bin=''; renderBinPicker(); updateStickerVisibility(); } // reset bin/kardus + stiker (Level 6 tak perlu)
-  if(k==='penyimpanan' || k==='level') updateBinState();
+  if(k==='level' || k==='penyimpanan'){ edSel.bin=''; renderBinPicker(); updateBinState(); }
+  if(k==='level') updateStickerVisibility();                // Level 6 tak perlu stiker
   highlightPicks(); edPreview(); maybeAutoSave();
 }
-// bin 1-5 utk level 1-5; KARDUS (angka bebas + tombol ＋) utk Level 6
-function maxKardusForRack(rack){
-  let m=0; for(const it of ITEMS){ if(it.rack===rack && String(it.level)==='6'){ const k=parseInt(it.bin,10); if(!isNaN(k)&&k>m) m=k; } } return m;
+// field ke-3: Level 6 → KARDUS (bebas), NON BIN → BARIS (bebas), lainnya → BIN (1-7)
+function thirdKind(){ return edSel.level==='6' ? 'kardus' : (edSel.penyimpanan==='NON BIN' ? 'baris' : 'bin'); }
+function maxThirdForRack(){
+  const kind=thirdKind(); let m=0;
+  for(const it of ITEMS){
+    if(it.rack!==edSel.rack) continue;
+    if(kind==='kardus'){ if(String(it.level)!=='6') continue; }
+    else if(kind==='baris'){ if(!isNonBin(it) || String(it.level)!==edSel.level) continue; }
+    else continue;
+    const k=parseInt(it.bin,10); if(!isNaN(k)&&k>m) m=k;
+  }
+  return m;
 }
 function renderBinPicker(){
-  const box=$('#pickBin'); const isL6 = edSel.level==='6';
-  box.classList.toggle('kardus', isL6);
-  if(isL6){
+  const box=$('#pickBin'); const unbounded = thirdKind()!=='bin';
+  box.classList.toggle('kardus', unbounded);
+  if(unbounded){
     const cur=parseInt(edSel.bin,10);
-    const max=Math.max(kardusMax, maxKardusForRack(edSel.rack)+2, isNaN(cur)?0:cur+1, 12);
+    const max=Math.max(kardusMax, maxThirdForRack()+2, isNaN(cur)?0:cur+1, 12);
     let h=''; for(let i=1;i<=max;i++) h+=`<button type="button" class="pchip" data-k="bin" data-v="${i}">${i}</button>`;
-    h+=`<button type="button" class="pchip padd" data-add="1" title="tambah kardus">＋</button>`;
+    h+=`<button type="button" class="pchip padd" data-add="1" title="tambah">＋</button>`;
     box.innerHTML=h;
   } else {
     box.innerHTML=BINS.map(v=>`<button type="button" class="pchip" data-k="bin" data-v="${v}">${v}</button>`).join('');
@@ -642,14 +651,10 @@ function renderBinPicker(){
     else b.onclick=()=>selectPick(b.dataset.k, b.dataset.v);
   });
 }
-// Kunci/buka kolom Bin/Kardus sesuai jenis penyimpanan & level
 function updateBinState(){
-  const nonbin = edSel.penyimpanan==='NON BIN';
-  const base = edSel.level==='6' ? 'Kardus ke-' : 'Kolom Bin';
-  $('#pickBin').classList.toggle('blocked', nonbin);
-  $('#binLbl').textContent = nonbin ? base+' (non-bin)' : base;
-  $('#binLbl').classList.toggle('binlbl-off', nonbin);
-  if(nonbin) edSel.bin='';
+  const kind=thirdKind();
+  $('#binLbl').textContent = kind==='kardus' ? 'Kardus ke-' : (kind==='baris' ? 'Baris ke-' : 'Kolom Bin');
+  $('#pickBin').classList.remove('blocked');
 }
 // Level 6 = kardus, TIDAK ditempel stiker → sembunyikan pertanyaan stiker
 function stickerNA(it){ return String(it.level)==='6'; }
@@ -663,15 +668,10 @@ function highlightPicks(){
   document.querySelectorAll('.pchip').forEach(b=>b.classList.toggle('on', edSel[b.dataset.k]===b.dataset.v));
 }
 function edPreview(){
-  const {rack,level,bin,penyimpanan}=edSel;
-  let a='—';
-  if(penyimpanan==='NON BIN'){ if(rack&&level) a=`${rack}-${level}`; }
-  else if(rack&&level&&bin){ a=`${rack}-${level}-${bin}`; }
-  $('#edPrev').textContent=a;
+  const {rack,level,bin}=edSel;
+  $('#edPrev').textContent=(rack&&level&&bin)?`${rack}-${level}-${bin}`:'—';
 }
-function addrReady(){
-  return edSel.penyimpanan==='NON BIN' ? (edSel.rack&&edSel.level) : (edSel.rack&&edSel.level&&edSel.bin);
-}
+function addrReady(){ return edSel.rack && edSel.level && edSel.bin; }
 // auto-simpan begitu alamat + stiker lengkap — KECUALI Mode Revisi aktif (pakai tombol Simpan).
 function maybeAutoSave(){
   if(reviseMode) return;
@@ -697,7 +697,7 @@ function openEditor(it){
   edSel = {
     rack:  RACKS.includes(it.rack) ? it.rack : '',
     level: LEVELS.map(String).includes(String(it.level)) ? String(it.level) : '',
-    bin:   BINS.map(String).includes(String(it.bin)) ? String(it.bin) : '',
+    bin:   (it.bin!=null && String(it.bin).trim()!=='') ? String(it.bin).trim() : '',
     penyimpanan: isNonBin(it) ? 'NON BIN' : 'BIN',
     sticker: (it.sticker==='Sudah'||it.sticker==='Belum') ? it.sticker : ''
   };
@@ -719,7 +719,7 @@ async function saveEditor(clear){
   const penyimpanan = edSel.penyimpanan||'BIN';
   const rack=clear?'':edSel.rack, level=clear?'':edSel.level;
   const sticker=(clear||edSel.level==='6')?'':edSel.sticker;   // Level 6: tanpa stiker
-  const bin=(clear||penyimpanan==='NON BIN')?'':edSel.bin;
+  const bin=clear?'':edSel.bin;
   if(!clear){
     if(penyimpanan==='NON BIN'){ if(!rack||!level){ toast('Lengkapi Rak & Level', true); return; } }
     else if(!rack||!level||!bin){ toast('Lengkapi Rak, Level, dan Bin', true); return; }
