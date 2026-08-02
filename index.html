@@ -218,8 +218,10 @@
   html[data-theme="dark"] .pchip.padd{color:var(--accent)}
   .l6box{break-inside:avoid;margin-bottom:8mm}
   .l6box.pagebreak{break-after:page;page-break-after:always}
-  .l6box .l6sub{font-size:9pt;color:#555;margin:0 0 2mm}
-  .l6box h3{font-size:13pt;margin:0 0 1.5mm;padding:2.5mm 3mm;background:#0d9488;color:#fff;border-radius:3px}
+  .l6head{text-align:center;margin:0 0 4mm;padding:4mm 3mm;border:2.5px solid #0b7f74;border-radius:4mm;background:#e6f7f3}
+  .l6head .l6rack{font-size:13pt;font-weight:800;color:#0b7f74;text-transform:uppercase;letter-spacing:1.2px}
+  .l6head .l6kardus{font-size:44pt;font-weight:900;color:#0f1b2d;line-height:1.05;margin:1mm 0}
+  .l6head .l6count{font-size:10.5pt;color:#555;font-weight:600}
   .l6table{width:100%;border-collapse:collapse;font-size:10pt}
   .l6table th,.l6table td{border:1px solid #888;padding:2mm 3mm;text-align:left;color:#000;vertical-align:top}
   .l6table th{background:#d6f5ef}
@@ -977,9 +979,13 @@ function buildLevel6Tables(){
     const items=g.items.slice().sort((a,b)=>(a.nama||'').localeCompare(b.nama||''));
     const rows=items.map((it,i)=>`<tr><td class="no">${i+1}</td><td>${esc(it.kode)}</td><td>${esc(it.nama||'')}</td></tr>`).join('');
     const brk = idx===keys.length-1 ? '' : ' pagebreak';
-    const kardusLbl = g.kardus==='-' ? '(tanpa kardus)' : 'Kardus '+esc(g.kardus);
-    return `<div class="l6box${brk}"><h3>Rak ${esc(g.rack)} · Level 6 · ${kardusLbl}</h3>
-      <div class="l6sub">${items.length} barang</div>
+    const kardusBig = g.kardus==='-' ? 'TANPA KARDUS' : 'KARDUS '+esc(g.kardus);
+    return `<div class="l6box${brk}">
+      <div class="l6head">
+        <div class="l6rack">Rak ${esc(g.rack)} · Level 6</div>
+        <div class="l6kardus">${kardusBig}</div>
+        <div class="l6count">${items.length} barang</div>
+      </div>
       <table class="l6table"><thead><tr><th class="no">No</th><th>Kode</th><th>Nama Barang</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }).join('');
